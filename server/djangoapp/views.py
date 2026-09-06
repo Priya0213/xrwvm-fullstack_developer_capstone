@@ -14,7 +14,9 @@ from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth import logout
 from django.contrib import messages
 from datetime import datetime
-from django.contrib.auth import logout
+from .models import CarModel
+
+from .restapis import get_request, post_review, analyze_review_sentiments
 
 from django.http import JsonResponse
 from django.contrib.auth import login, authenticate
@@ -111,17 +113,84 @@ def registration(request):
 
 # # Update the `get_dealerships` view to render the index page with
 # a list of dealerships
-# def get_dealerships(request):
+def get_dealerships(request, state="All"):
+    if request.method == "GET":
+        if state == "All":
+            dealerships = get_request("/fetchDealers")
+        else:
+            dealerships = get_request("/fetchDealers/" + state)
+
+        return JsonResponse(
+            {"status": 200, "dealers": dealerships}
+        )
 # ...
 
 # Create a `get_dealer_reviews` view to render the reviews of a dealer
 # def get_dealer_reviews(request,dealer_id):
+def get_dealer_reviews(request, dealer_id):
+    if request.method == "GET":
+        reviews = get_request("/fetchReviews/dealer/" + str(dealer_id))
+
+        return JsonResponse({
+            "status": 200,
+            "reviews": reviews
+        })
+
+
+def get_dealer_details(request, dealer_id):
+    if request.method == "GET":
+        dealer = get_request("/fetchDealer/" + str(dealer_id))
+
+        return JsonResponse({
+            "status": 200,
+            "dealer": dealer
+        })
 # ...
 
+
+def get_cars(request):
+    if request.method == "GET":
+        car_models = CarModel.objects.select_related("car_make").all()
+
+        cars = []
+        for car in car_models:
+            cars.append({
+                "CarMake": car.car_make.name,
+                "CarModel": car.name
+            })
+
+        return JsonResponse({
+            "status": 200,
+            "CarModels": cars
+        })
 # Create a `get_dealer_details` view to render the dealer details
 # def get_dealer_details(request, dealer_id):
 # ...
 
 # Create a `add_review` view to submit a review
 # def add_review(request):
+@csrf_exempt
+def add_review(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        sentiment_response = analyze_review_sentiments(data["review"])
+
+        if sentiment_response and "sentiment" in sentiment_response:
+            data["sentiment"] = sentiment_response["sentiment"]
+        else:
+            data["sentiment"] = "neutral"
+
+        response = post_review(data)
+
+        if response is not None:
+            return JsonResponse({
+                "status": 200,
+                "review": response
+            })
+
+        return JsonResponse({
+            "status": 500,
+            "error": "Unable to add review"
+        })
 # ...
